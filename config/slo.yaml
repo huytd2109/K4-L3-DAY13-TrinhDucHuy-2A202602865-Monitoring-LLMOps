@@ -7,7 +7,8 @@ primary_slo:
     total_event: 'event == "request_received"'
   target_percent: 99.5
   error_budget_percent: 0.5
-  note: Học viên phải giải thích hoặc điều chỉnh ngưỡng bằng baseline của mình.
+  error_budget_minutes_per_window: 201.6
+  note: 0.5% của 28 ngày tương đương 201.6 phút (3 giờ 21 phút 36 giây) request không đạt SLI; ngưỡng 3000 ms khớp threshold P95 trên dashboard.
 guardrails:
   error_rate_pct_max: 2
   daily_cost_usd_max: 2.5
