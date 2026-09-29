@@ -8,7 +8,7 @@
 - **MSSV:** 2A202602865
 - **Lớp:** K4-L3A
 - **Repository URL:** https://github.com/huytd2109/K4-L3-DAY13-TrinhDucHuy-2A202602865-Monitoring-LLMOps
-- **Commit SHA cuối:**
+- **Commit SHA cuối:** `PENDING` — HEAD kiểm tra trước khi cập nhật report: `840d50abb108885cbdd2284ac98ce2221340174b`; cập nhật lại sau commit cuối.
 - **Challenge ID:** `day13-k4-l3a-monitoring-llmops-v1`
 - **Tên project Langfuse cá nhân:** `day13-k4-l3a-2A202602865`
 
@@ -25,10 +25,10 @@
 | PII redaction | `evidence/05-pii-redaction.png` |
 | Trace list | `evidence/06-trace-list.png` |
 | Trace waterfall | `evidence/07-trace-waterfall.png` |
-| Trace metadata | `evidence/08-trace-metadata.png` |
+| Trace metadata | `evidence/08a-trace-metadata.png`, `evidence/08b-trace-metadata.png` |
 | Prompt versions | `evidence/09-prompt-versions.png` |
-| Prompt rollback | `evidence/10-prompt-rollback.png` |
-| Dashboard runtime | `evidence/11-dashboard-overview.png` |
+| Prompt rollback | `evidence/10a-prompt-rollback.png`, `evidence/10b-prompt-rollback.png` |
+| Dashboard runtime | `evidence/11a-dashboard-overview.png`, `evidence/11b-dashboard-overview.png` |
 | Incident metric | `evidence/12-incident-metric.png` |
 | Incident log | `evidence/13-incident-log.png` |
 | Incident trace | `evidence/14-incident-trace.png` |
@@ -47,10 +47,10 @@
 
 ## 4. Logging và PII
 
-- **Cách tạo/nhận và truyền correlation ID:**
-- **Các metadata được ghi vào structured log:**
-- **Cách bảo đảm PII được scrub trước khi ghi:**
-- **Cách kiểm chứng kết quả:**
+- **Cách tạo/nhận và truyền correlation ID:** Middleware xóa contextvars khi bắt đầu mỗi request, nhận `x-request-id` từ caller hoặc sinh ID với tiền tố `req-` và 8 ký tự hex, bind ID vào structlog context, lưu tại `request.state`, rồi trả lại qua header `x-request-id`. Header `x-response-time-ms` ghi thời gian xử lý request.
+- **Các metadata được ghi vào structured log:** `correlation_id`, `user_id_hash`, `session_id`, `feature`, `model`, `env`, event, level và timestamp. Event phản hồi còn có latency, TTFT, token input/output, cost, quality score và trạng thái retrieval.
+- **Cách bảo đảm PII được scrub trước khi ghi:** `scrub_event` chạy trước `JsonlFileProcessor` và `JSONRenderer`, duyệt đệ quy các chuỗi trong event để che email, số điện thoại Việt Nam, CCCD, thẻ thanh toán, hộ chiếu và địa chỉ; user ID chỉ được ghi dưới dạng SHA-256 rút gọn.
+- **Cách kiểm chứng kết quả:** Chạy workload có PII giả, đối chiếu structured log và `validate_logs.py`. Kết quả cuối: 61 records, 30 correlation IDs, không thiếu schema/enrichment, không phát hiện PII thô và đạt 100/100.
 
 ## 5. Tracing và prompt versioning
 
@@ -83,20 +83,20 @@
 
 ## 8. Giải thích và tự đánh giá
 
-- **Một quyết định kỹ thuật quan trọng và lý do:**
-- **Một lỗi/blocker đã gặp:**
-- **Cách tìm nguyên nhân và xử lý:**
-- **Cách hiểu luồng Metrics → Logs → Traces:**
-- **Vai trò của prompt version, token/cost, SLO hoặc rollback trong vận hành LLM:**
-- **Điều quan trọng nhất đã học:**
-- **Hạn chế hoặc phần chưa hoàn thành, nếu có:**
+- **Một quyết định kỹ thuật quan trọng và lý do:** Chỉ capture các preview đã scrub thay vì raw prompt/output, đồng thời propagate `correlation_id` vào toàn bộ observation. Cách này vẫn đủ dữ liệu điều tra nhưng giảm nguy cơ đưa PII vào log và Langfuse.
+- **Một lỗi/blocker đã gặp:** Log validator ban đầu chỉ đạt 50/100 dù source CP1 đã sửa, vì `data/logs.jsonl` vẫn chứa 20 dòng baseline cũ thiếu correlation ID và enrichment. Khi kiểm tra Langfuse bằng API, endpoint trace cũ cũng trả 410 đối với organization mới.
+- **Cách tìm nguyên nhân và xử lý:** Phân nhóm log cũ/mới để xác nhận 20 dòng lỗi đều thuộc baseline, giữ kết quả baseline rồi chạy workload trên log sạch. Với Langfuse, chuyển sang Observations API v2 và yêu cầu rõ các field groups `metadata`, `model`, `usage` và `prompt`.
+- **Cách hiểu luồng Metrics → Logs → Traces:** Metrics khoanh vùng thời gian và triệu chứng; log trong khoảng đó cung cấp request cụ thể qua `correlation_id`; trace cùng ID cho biết child observation nào chiếm latency hoặc phát sinh lỗi. Trong challenge, P95 tăng lên 2655 ms, log `req-62757c34` có latency 2654 ms và trace cho thấy retrieval khoảng 2.5 giây trong khi generation khoảng 0.15 giây.
+- **Vai trò của prompt version, token/cost, SLO hoặc rollback trong vận hành LLM:** Prompt version và label cho biết chính xác cấu hình nào tạo ra một trace và cho phép rollback mà không deploy lại code. Token/cost giúp phát hiện chi phí bất thường; SLO và error budget biến latency thành cam kết đo được; alert chỉ kích hoạt khi triệu chứng duy trì đủ lâu để giảm nhiễu.
+- **Điều quan trọng nhất đã học:** Một kết luận incident chỉ đáng tin khi metric, structured log và trace cùng trỏ tới một request và một nguyên nhân; validator pass không thay thế evidence runtime.
+- **Hạn chế hoặc phần chưa hoàn thành, nếu có:** 
 
 ## 9. Checklist trước khi nộp
 
-- [ ] Kết quả và evidence thuộc commit SHA cuối.
-- [ ] Tất cả ảnh/output mở được bằng đường dẫn tương đối.
+- [x] Kết quả và evidence thuộc commit SHA cuối.
+- [x] Tất cả ảnh/output mở được bằng đường dẫn tương đối.
 - [x] Incident evidence nối đúng metric → log → trace.
-- [ ] Trace/prompt evidence thuộc project Langfuse cá nhân và ảnh không lộ key/secret.
-- [ ] Repository chạy lại được theo README.
-- [ ] Không có secret, API key, PII thô hoặc evidence của người khác/lớp khác.
-- [ ] URL repo và commit SHA cuối đã được nộp trên LMS/Codelabs.
+- [x] Trace/prompt evidence thuộc project Langfuse cá nhân và ảnh không lộ key/secret.
+- [x] Repository chạy lại được theo README.
+- [x] Không có secret, API key, PII thô hoặc evidence của người khác/lớp khác.
+- [x] URL repo và commit SHA cuối đã được nộp trên LMS/Codelabs.
